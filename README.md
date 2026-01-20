@@ -9,11 +9,13 @@ Transfira suas playlists do Spotify para o YouTube Music usando arquivos CSV exp
 
 - Interface gráfica moderna (tema escuro)
 - Importa múltiplos arquivos CSV de uma vez
+- **Merge de playlists**: adiciona apenas músicas novas em playlists existentes
+- Visualiza suas playlists do YouTube Music
 - Busca automática das músicas no YouTube Music
-- Cria playlists automaticamente
+- Cria playlists automaticamente ou faz merge com existentes
 - Barra de progresso em tempo real
 - Log detalhado das operações
-- Relatório de músicas não encontradas
+- Relatório de músicas adicionadas, já existentes e não encontradas
 
 ## Pré-requisitos
 
@@ -70,23 +72,38 @@ Clique em "Conectar YT Music" e escolha um método de autenticação:
 
 1. Clique em "Importar CSV(s)"
 2. Selecione os arquivos CSV exportados do Exportify
-3. Marque as playlists que deseja transferir
-4. Clique em "Transferir Playlists Selecionadas"
+3. Para cada playlist, clique em "Destino" para escolher:
+   - **Nova playlist**: cria uma playlist nova no YouTube Music
+   - **Merge**: selecione uma playlist existente para adicionar apenas as músicas que ainda não existem
+4. Marque as playlists que deseja transferir
+5. Clique em "Transferir Playlists Selecionadas"
+
+### Modo Merge
+
+O modo merge compara as músicas do CSV com as da playlist existente no YouTube Music e:
+- Pula músicas que já existem na playlist
+- Adiciona apenas as músicas novas
+- Mostra um relatório detalhado no final
 
 ## Screenshots
 
+### Tela Principal
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Spotify CSV → YouTube Music                                │
 ├─────────────────────────────────────────────────────────────┤
 │  [Importar CSV(s)]              [Conectar YT Music]         │
 ├─────────────────────────────────────────────────────────────┤
-│  Playlists CSV (Exportify)      [Selecionar Todas] [Limpar] │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │ ☑ MPB                              50 músicas   [X] │    │
-│  │ ☑ Rock Anos 80                     42 músicas   [X] │    │
-│  │ ☑ Jazz Classics                    38 músicas   [X] │    │
-│  └─────────────────────────────────────────────────────┘    │
+│  ┌─────────────────┬──────────────────┐                     │
+│  │ CSV (Spotify)   │ YouTube Music    │                     │
+│  ├─────────────────┴──────────────────┤                     │
+│  │ Playlists CSV (Exportify)  [Todas] [Limpar]              │
+│  │ ┌───────────────────────────────────────────────┐        │
+│  │ │ ☑ MPB           → Merge: mpb      [Destino][X]│        │
+│  │ │ ☑ Rock Anos 80  → Nova playlist   [Destino][X]│        │
+│  │ │ ☑ Jazz Classics 38 músicas        [Destino][X]│        │
+│  │ └───────────────────────────────────────────────┘        │
+│  └──────────────────────────────────────────────────────────┤
 ├─────────────────────────────────────────────────────────────┤
 │  Playlist 1/3 - Música 25/50                                │
 │  ████████████████░░░░░░░░░░░░░░░░  50%                      │
@@ -97,6 +114,27 @@ Clique em "Conectar YT Music" e escolha um método de autenticação:
 │  Log                                                        │
 │  Carregado: MPB (50 músicas)                                │
 │  Conectado ao YouTube Music!                                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Dialog de Seleção de Destino
+```
+┌───────────────────────────────────────────────────────[X]───┐
+│  CSV: mpb (4 músicas)                                       │
+│                                                             │
+│  Escolha o destino no YouTube Music:                        │
+│                                                             │
+│  [✓] Criar nova playlist                                    │
+│  [ ] Merge com playlist existente (adiciona apenas novas)   │
+│                                                             │
+│  Suas playlists no YouTube Music:                           │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ [ ] Liked Music (? músicas)                         │    │
+│  │ [ ] ovo_bate_cabeça (237 músicas)                   │    │
+│  │ [ ] Episodes for Later (? músicas)                  │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                             │
+│  [Cancelar]                              [Confirmar]        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
