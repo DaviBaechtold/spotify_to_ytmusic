@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Spotify to YouTube Music Transfer - GUI Version (CSV)
+Spotify to YouTube Music Transfer - GUI Version
 
-Interface gráfica para transferir playlists do Spotify (via CSV do Exportify)
+Interface gráfica para transferir playlists do Spotify (via link ou CSV)
 para o YouTube Music, com suporte a merge de playlists existentes.
 """
 
@@ -17,9 +17,62 @@ import customtkinter as ctk
 from tkinter import messagebox, filedialog
 from ytmusicapi import YTMusic
 
+import requests
+
 # Configuração do tema
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
+
+class SpotifyLinkDialog(ctk.CTkToplevel):
+    """Dialog para importar playlist via link do Spotify."""
+
+    def __init__(self, parent, callback):
+        super().__init__(parent)
+        self.callback = callback
+
+        self.title("Importar Playlist do Spotify")
+        self.geometry("550x200")
+        self.resizable(False, False)
+
+        self.transient(parent)
+        self.after(100, self.grab_set)
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        ctk.CTkLabel(
+            self,
+            text="Cole o link da playlist do Spotify:",
+            font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(pady=(20, 10))
+
+        ctk.CTkLabel(
+            self,
+            text="Exemplo: https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+            font=ctk.CTkFont(size=11),
+            text_color="gray"
+        ).pack(pady=(0, 10))
+
+        self.link_entry = ctk.CTkEntry(self, width=500, placeholder_text="https://open.spotify.com/playlist/...")
+        self.link_entry.pack(padx=20)
+
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=20)
+
+        ctk.CTkButton(btn_frame, text="Cancelar", command=self.cancel, fg_color="gray40", width=100).pack(side="left")
+        ctk.CTkButton(btn_frame, text="Importar", command=self.submit, width=100).pack(side="right")
+
+    def submit(self):
+        link = self.link_entry.get().strip()
+        if not link or "spotify.com" not in link:
+            messagebox.showerror("Erro", "Cole um link válido do Spotify")
+            return
+        self.callback(link)
+        self.destroy()
+
+    def cancel(self):
+        self.callback(None)
+        self.destroy()
 
 
 class OAuthSetupDialog(ctk.CTkToplevel):
@@ -356,6 +409,7 @@ class SpotifyYTMusicApp(ctk.CTk):
         self.csv_files = []
         self.yt_playlists = []
         self.is_transferring = False
+        self.cancel_transfer = False
 
         self.setup_ui()
 
@@ -378,15 +432,18 @@ class SpotifyYTMusicApp(ctk.CTk):
         conn_frame.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
         conn_frame.grid_columnconfigure((0, 1), weight=1)
 
-        # CSV Import
-        csv_frame = ctk.CTkFrame(conn_frame)
-        csv_frame.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
+        # Spotify Import
+        spotify_frame = ctk.CTkFrame(conn_frame)
+        spotify_frame.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
-        self.csv_status = ctk.CTkLabel(csv_frame, text="Nenhum CSV carregado", font=ctk.CTkFont(size=14))
-        self.csv_status.pack(side="left", padx=10)
+        self.spotify_status = ctk.CTkLabel(spotify_frame, text="Nenhuma playlist", font=ctk.CTkFont(size=14))
+        self.spotify_status.pack(side="left", padx=10)
 
-        self.csv_btn = ctk.CTkButton(csv_frame, text="Importar CSV(s)", command=self.import_csv, width=140)
-        self.csv_btn.pack(side="right", padx=10, pady=5)
+        self.link_btn = ctk.CTkButton(spotify_frame, text="Link Spotify", command=self.import_spotify_link, width=100)
+        self.link_btn.pack(side="right", padx=5, pady=5)
+
+        self.csv_btn = ctk.CTkButton(spotify_frame, text="CSV", command=self.import_csv, width=60, fg_color="gray40")
+        self.csv_btn.pack(side="right", padx=5, pady=5)
 
         # YouTube Music connection
         ytm_frame = ctk.CTkFrame(conn_frame)
@@ -402,7 +459,7 @@ class SpotifyYTMusicApp(ctk.CTk):
         self.tabview = ctk.CTkTabview(self)
         self.tabview.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
 
-        self.tab_csv = self.tabview.add("CSV (Spotify)")
+        self.tab_csv = self.tabview.add("Spotify")
         self.tab_ytm = self.tabview.add("YouTube Music")
 
         self.setup_csv_tab()
@@ -453,7 +510,7 @@ class SpotifyYTMusicApp(ctk.CTk):
         header = ctk.CTkFrame(self.tab_csv, fg_color="transparent")
         header.grid(row=0, column=0, padx=10, pady=(10, 5), sticky="ew")
 
-        ctk.CTkLabel(header, text="Playlists CSV (Exportify)", font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
+        ctk.CTkLabel(header, text="Playlists do Spotify", font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
 
         self.clear_btn = ctk.CTkButton(header, text="Limpar", command=self.clear_list, width=80, fg_color="gray40", hover_color="gray30")
         self.clear_btn.pack(side="right")
@@ -471,7 +528,7 @@ class SpotifyYTMusicApp(ctk.CTk):
 
         self.csv_placeholder = ctk.CTkLabel(
             self.csv_scroll,
-            text="Importe arquivos CSV do Exportify\n(exportify.app)",
+            text="Importe playlists usando o botao 'Link Spotify'\nou CSV do Exportify (exportify.app)",
             font=ctk.CTkFont(size=14),
             text_color="gray"
         )
@@ -521,6 +578,272 @@ class SpotifyYTMusicApp(ctk.CTk):
         self.display_csv_playlists()
         self.check_ready()
 
+    def import_spotify_link(self):
+        """Importa playlist via link do Spotify."""
+        SpotifyLinkDialog(self, self.on_spotify_link)
+
+    def on_spotify_link(self, link):
+        """Callback quando link do Spotify é fornecido."""
+        if not link:
+            return
+
+        # Extrair playlist ID
+        playlist_id = self.extract_spotify_playlist_id(link)
+        if not playlist_id:
+            messagebox.showerror("Erro", "Link inválido. Use um link de playlist do Spotify.")
+            return
+
+        self.log(f"Importando playlist do Spotify...")
+        self.link_btn.configure(state="disabled", text="Carregando...")
+
+        def do_import():
+            error_msg = None
+            try:
+                # Buscar dados da playlist via web scraping
+                playlist_name, tracks = self.fetch_spotify_playlist(playlist_id)
+
+                if not tracks:
+                    raise ValueError("Não foi possível obter as músicas da playlist.\nVerifique se a playlist é pública.")
+
+                # Adicionar à lista
+                self.csv_files.append({
+                    'name': playlist_name,
+                    'filepath': None,
+                    'tracks': tracks,
+                    'tracks_total': len(tracks),
+                    'target': None,
+                    'target_name': None,
+                    'source': 'spotify'
+                })
+
+                self.after(0, lambda n=playlist_name, t=len(tracks): self.log(f"Importado: {n} ({t} musicas)"))
+                self.after(0, self.display_csv_playlists)
+                self.after(0, self.check_ready)
+
+            except Exception as e:
+                error_msg = str(e)
+                self.after(0, lambda msg=error_msg: self.log(f"Erro ao importar: {msg}"))
+                self.after(0, lambda msg=error_msg: messagebox.showerror("Erro", f"Erro ao importar playlist:\n{msg}"))
+            finally:
+                self.after(0, lambda: self.link_btn.configure(state="normal", text="Link Spotify"))
+
+        threading.Thread(target=do_import, daemon=True).start()
+
+    def fetch_spotify_playlist(self, playlist_id):
+        """Busca dados de uma playlist pública do Spotify usando o embed player."""
+        tracks = []
+        playlist_name = "Spotify Playlist"
+
+        session = requests.Session()
+
+        # Método 1: Usar o embed player do Spotify
+        try:
+            # O embed player carrega dados de playlists públicas
+            embed_url = f"https://open.spotify.com/embed/playlist/{playlist_id}"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Referer': 'https://open.spotify.com/',
+            }
+
+            resp = session.get(embed_url, headers=headers, timeout=20)
+
+            if resp.status_code == 200:
+                html = resp.text
+
+                # O embed contém dados JSON no HTML
+                # Procurar por dados no script de inicialização
+                data_match = re.search(r'<script id="__NEXT_DATA__"[^>]*type="application/json">(.+?)</script>', html, re.DOTALL)
+                if data_match:
+                    try:
+                        data = json.loads(data_match.group(1))
+                        # Navegar pela estrutura do Next.js
+                        props = data.get('props', {}).get('pageProps', {})
+
+                        # Extrair nome da playlist
+                        if 'state' in props:
+                            state = props['state']
+                            if 'data' in state and 'entity' in state['data']:
+                                entity = state['data']['entity']
+                                playlist_name = entity.get('name', playlist_name)
+
+                                # Extrair tracks
+                                trackList = entity.get('trackList', [])
+                                for item in trackList:
+                                    track_name = item.get('title', '')
+                                    track_artists = item.get('subtitle', '')
+                                    if track_name:
+                                        tracks.append({'name': track_name, 'artists': track_artists})
+                    except (json.JSONDecodeError, KeyError) as e:
+                        self.after(0, lambda msg=str(e): self.log(f"Parse embed falhou: {msg}"))
+
+                # Fallback: procurar padrões alternativos no HTML do embed
+                if not tracks:
+                    # Procurar por "title" e "subtitle" (format do embed)
+                    pattern = r'"title"\s*:\s*"([^"]+)"\s*,\s*"subtitle"\s*:\s*"([^"]+)"'
+                    matches = re.findall(pattern, html)
+                    for title, subtitle in matches:
+                        if title and len(title) > 1 and subtitle:
+                            tracks.append({'name': title, 'artists': subtitle})
+
+                    # Procurar nome da playlist
+                    name_match = re.search(r'"name"\s*:\s*"([^"]{2,100})"[^}]*"type"\s*:\s*"playlist"', html)
+                    if name_match:
+                        playlist_name = name_match.group(1)
+
+        except Exception as e:
+            self.after(0, lambda msg=str(e): self.log(f"Embed falhou: {msg}"))
+
+        # Método 2: Tentar página normal com scraping mais agressivo
+        if not tracks:
+            self.after(0, lambda: self.log("Tentando scraping da pagina..."))
+            try:
+                url = f"https://open.spotify.com/playlist/{playlist_id}"
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'pt-BR,pt;q=0.8,en-US;q=0.5,en;q=0.3',
+                    'DNT': '1',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                }
+                resp = session.get(url, headers=headers, timeout=20)
+
+                if resp.status_code == 200:
+                    html = resp.text
+
+                    # Tentar extrair do __NEXT_DATA__
+                    next_match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.+?)</script>', html, re.DOTALL)
+                    if next_match:
+                        try:
+                            data = json.loads(next_match.group(1))
+                            playlist_name, tracks = self._parse_next_data(data)
+                        except:
+                            pass
+
+                    # Tentar application/ld+json (schema.org)
+                    if not tracks:
+                        ld_match = re.search(r'<script type="application/ld\+json">(.+?)</script>', html, re.DOTALL)
+                        if ld_match:
+                            try:
+                                ld_data = json.loads(ld_match.group(1))
+                                if ld_data.get('name'):
+                                    playlist_name = ld_data['name']
+                                for t in ld_data.get('track', []):
+                                    name = t.get('name', '')
+                                    artist = ''
+                                    if 'byArtist' in t:
+                                        ba = t['byArtist']
+                                        if isinstance(ba, dict):
+                                            artist = ba.get('name', '')
+                                        elif isinstance(ba, list):
+                                            artist = ", ".join([a.get('name', '') for a in ba])
+                                    if name:
+                                        tracks.append({'name': name, 'artists': artist})
+                            except:
+                                pass
+
+            except Exception as e:
+                self.after(0, lambda msg=str(e): self.log(f"Scraping falhou: {msg}"))
+
+        # Método 3: oembed para nome
+        if not playlist_name or playlist_name == "Spotify Playlist":
+            try:
+                oembed_url = f"https://open.spotify.com/oembed?url=https://open.spotify.com/playlist/{playlist_id}"
+                oembed_resp = session.get(oembed_url, timeout=10)
+                if oembed_resp.status_code == 200:
+                    playlist_name = oembed_resp.json().get('title', playlist_name)
+            except:
+                pass
+
+        # Remover duplicatas
+        if tracks:
+            seen = set()
+            unique = []
+            for t in tracks:
+                key = f"{t['name'].lower().strip()}|{t['artists'].lower().strip()}"
+                if key not in seen:
+                    seen.add(key)
+                    unique.append(t)
+            tracks = unique
+
+        if not tracks:
+            raise ValueError("Não foi possível encontrar dados da playlist.\nVerifique se a playlist é pública.")
+
+        return playlist_name, tracks
+
+    def _parse_next_data(self, data):
+        """Tenta extrair dados do __NEXT_DATA__ do Spotify."""
+        playlist_name = "Spotify Playlist"
+        tracks = []
+
+        # Navegar por diferentes estruturas possíveis
+        def find_tracks(obj, depth=0):
+            if depth > 10:
+                return []
+            found = []
+            if isinstance(obj, dict):
+                # Verificar se é um objeto de track
+                if 'name' in obj and 'artists' in obj and isinstance(obj.get('artists'), list):
+                    artists = ", ".join([a.get('name', '') for a in obj['artists'] if isinstance(a, dict)])
+                    if obj['name'] and artists:
+                        found.append({'name': obj['name'], 'artists': artists})
+
+                # Continuar buscando em sub-objetos
+                for key, value in obj.items():
+                    found.extend(find_tracks(value, depth + 1))
+
+            elif isinstance(obj, list):
+                for item in obj:
+                    found.extend(find_tracks(item, depth + 1))
+
+            return found
+
+        # Tentar encontrar o nome da playlist
+        def find_playlist_name(obj, depth=0):
+            if depth > 10:
+                return None
+            if isinstance(obj, dict):
+                if obj.get('__typename') == 'Playlist' and 'name' in obj:
+                    return obj['name']
+                if 'playlist' in obj and isinstance(obj['playlist'], dict) and 'name' in obj['playlist']:
+                    return obj['playlist']['name']
+                for value in obj.values():
+                    result = find_playlist_name(value, depth + 1)
+                    if result:
+                        return result
+            elif isinstance(obj, list):
+                for item in obj:
+                    result = find_playlist_name(item, depth + 1)
+                    if result:
+                        return result
+            return None
+
+        name = find_playlist_name(data)
+        if name:
+            playlist_name = name
+
+        tracks = find_tracks(data)
+
+        # Remover duplicatas mantendo ordem
+        seen = set()
+        unique_tracks = []
+        for t in tracks:
+            key = f"{t['name']}|{t['artists']}"
+            if key not in seen:
+                seen.add(key)
+                unique_tracks.append(t)
+
+        return playlist_name, unique_tracks
+
+    def extract_spotify_playlist_id(self, url):
+        """Extrai o ID da playlist de um link do Spotify."""
+        # https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M
+        # https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=...
+        match = re.search(r'playlist/([a-zA-Z0-9]+)', url)
+        return match.group(1) if match else None
+
     def load_csv_file(self, filepath):
         try:
             tracks = []
@@ -551,7 +874,7 @@ class SpotifyYTMusicApp(ctk.CTk):
     def clear_list(self):
         self.csv_files = []
         self.display_csv_playlists()
-        self.csv_status.configure(text="Nenhum CSV carregado")
+        self.spotify_status.configure(text="Nenhuma playlist")
         self.check_ready()
 
     def display_csv_playlists(self):
@@ -564,12 +887,12 @@ class SpotifyYTMusicApp(ctk.CTk):
         if not self.csv_files:
             self.csv_placeholder = ctk.CTkLabel(
                 self.csv_scroll,
-                text="Importe arquivos CSV do Exportify\n(exportify.app)",
+                text="Importe playlists usando o botao 'Link Spotify'\nou CSV do Exportify (exportify.app)",
                 font=ctk.CTkFont(size=14),
                 text_color="gray"
             )
             self.csv_placeholder.grid(row=0, column=0, pady=50)
-            self.csv_status.configure(text="Nenhum CSV carregado")
+            self.spotify_status.configure(text="Nenhuma playlist")
             return
 
         for i, pl in enumerate(self.csv_files):
@@ -612,7 +935,7 @@ class SpotifyYTMusicApp(ctk.CTk):
             )
             remove_btn.grid(row=0, column=4, padx=5, pady=8)
 
-        self.csv_status.configure(text=f"{len(self.csv_files)} playlist(s) carregada(s)")
+        self.spotify_status.configure(text=f"{len(self.csv_files)} playlist(s)")
 
     def choose_destination(self, index):
         """Abre dialog para escolher destino da playlist."""
@@ -836,11 +1159,23 @@ class SpotifyYTMusicApp(ctk.CTk):
 
     def on_ytmusic_connected(self):
         self.ytm_status.configure(text="YouTube Music: Conectado")
-        self.ytm_btn.configure(state="disabled", text="Conectado")
+        self.ytm_btn.configure(state="normal", text="Desconectar", command=self.disconnect_ytmusic)
         self.refresh_ytm_btn.configure(state="normal")
         self.log("Conectado ao YouTube Music!")
         self.load_ytm_playlists()
         self.check_ready()
+
+    def disconnect_ytmusic(self):
+        """Desconecta do YouTube Music para permitir reconexão."""
+        self.ytm = None
+        self.yt_playlists = []
+        self.ytm_status.configure(text="YouTube Music: Desconectado")
+        self.ytm_btn.configure(text="Conectar YT Music", command=self.show_auth_options)
+        self.refresh_ytm_btn.configure(state="disabled")
+        self.display_ytm_playlists()
+        self.display_csv_playlists()  # Atualizar botões de destino
+        self.check_ready()
+        self.log("Desconectado do YouTube Music")
 
     def check_ready(self):
         if self.ytm and self.csv_files:
@@ -865,18 +1200,32 @@ class SpotifyYTMusicApp(ctk.CTk):
             return
 
         self.is_transferring = True
-        self.transfer_btn.configure(state="disabled", text="Transferindo...")
+        self.cancel_transfer = False
+        self.transfer_btn.configure(text="Cancelar", command=self.cancel_transfer_operation, fg_color="red", hover_color="darkred")
         self.csv_btn.configure(state="disabled")
+        self.link_btn.configure(state="disabled")
 
         for cb in self.playlist_checkboxes:
             cb.configure(state="disabled")
 
         threading.Thread(target=self.do_transfer, args=(selected,), daemon=True).start()
 
+    def cancel_transfer_operation(self):
+        """Cancela a operação de transferência em andamento."""
+        self.cancel_transfer = True
+        self.transfer_btn.configure(state="disabled", text="Cancelando...")
+        self.log("Cancelando transferencia...")
+
     def do_transfer(self, playlists):
         total_playlists = len(playlists)
+        was_cancelled = False
 
         for pl_idx, playlist in enumerate(playlists):
+            # Verificar cancelamento
+            if self.cancel_transfer:
+                was_cancelled = True
+                break
+
             self.after(0, lambda p=playlist: self.log(f"\n{'='*40}"))
             self.after(0, lambda p=playlist: self.log(f"Transferindo: {p['name']}"))
 
@@ -933,6 +1282,18 @@ class SpotifyYTMusicApp(ctk.CTk):
             total_tracks = len(tracks)
 
             for i, track in enumerate(tracks):
+                # Verificar cancelamento
+                if self.cancel_transfer:
+                    was_cancelled = True
+                    self.after(0, lambda f=len(found_videos): self.log(f"Cancelado. {f} musicas foram adicionadas antes do cancelamento."))
+                    # Adicionar as músicas encontradas até agora
+                    if found_videos:
+                        try:
+                            self.ytm.add_playlist_items(yt_playlist_id, found_videos)
+                        except:
+                            pass
+                    break
+
                 progress = (i + 1) / total_tracks
                 self.after(0, lambda p=progress: self.progress_bar.set(p))
                 self.after(0, lambda idx=i, total=total_tracks, plidx=pl_idx, pltotal=total_playlists:
@@ -964,6 +1325,10 @@ class SpotifyYTMusicApp(ctk.CTk):
 
                 time.sleep(0.3)
 
+            # Se foi cancelado, sair do loop de playlists
+            if was_cancelled:
+                break
+
             # Adicionar músicas à playlist
             if found_videos:
                 self.after(0, lambda: self.current_track_label.configure(text="Adicionando musicas a playlist..."))
@@ -971,6 +1336,8 @@ class SpotifyYTMusicApp(ctk.CTk):
                 try:
                     batch_size = 25
                     for i in range(0, len(found_videos), batch_size):
+                        if self.cancel_transfer:
+                            break
                         batch = found_videos[i:i + batch_size]
                         self.ytm.add_playlist_items(yt_playlist_id, batch)
                         time.sleep(1)
@@ -989,7 +1356,7 @@ class SpotifyYTMusicApp(ctk.CTk):
             if not_found and len(not_found) <= 5:
                 self.after(0, lambda n=not_found: self.log(f"  Nao encontradas: {', '.join(n)}"))
 
-        self.after(0, self.on_transfer_complete)
+        self.after(0, lambda c=was_cancelled: self.on_transfer_complete(c))
 
     def search_song(self, track):
         query = f"{track['name']} {track['artists']}"
@@ -1001,24 +1368,37 @@ class SpotifyYTMusicApp(ctk.CTk):
             pass
         return None
 
-    def on_transfer_complete(self):
+    def on_transfer_complete(self, was_cancelled=False):
         self.is_transferring = False
-        self.transfer_btn.configure(state="normal", text="Transferir Playlists Selecionadas")
+        self.cancel_transfer = False
+        self.transfer_btn.configure(
+            state="normal",
+            text="Transferir Playlists Selecionadas",
+            command=self.start_transfer,
+            fg_color=("#3B8ED0", "#1F6AA5"),
+            hover_color=("#36719F", "#144870")
+        )
         self.csv_btn.configure(state="normal")
+        self.link_btn.configure(state="normal")
         self.progress_bar.set(0)
-        self.progress_label.configure(text="Transferencia concluida!")
         self.current_track_label.configure(text="")
 
         for cb in self.playlist_checkboxes:
             cb.configure(state="normal")
 
         self.log("\n" + "="*40)
-        self.log("Transferencia concluida!")
+
+        if was_cancelled:
+            self.progress_label.configure(text="Transferencia cancelada")
+            self.log("Transferencia cancelada pelo usuario")
+            messagebox.showinfo("Cancelado", "Transferencia cancelada.\nAs musicas ja adicionadas permanecem nas playlists.")
+        else:
+            self.progress_label.configure(text="Transferencia concluida!")
+            self.log("Transferencia concluida!")
+            messagebox.showinfo("Concluido", "Transferencia de playlists concluida!\nVerifique o log para detalhes.")
 
         # Recarregar playlists do YT Music
         self.load_ytm_playlists()
-
-        messagebox.showinfo("Concluido", "Transferencia de playlists concluida!\nVerifique o log para detalhes.")
 
 
 def main():
